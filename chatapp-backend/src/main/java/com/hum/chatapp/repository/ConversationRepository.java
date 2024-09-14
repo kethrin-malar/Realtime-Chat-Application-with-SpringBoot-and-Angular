@@ -44,4 +44,9 @@ public interface ConversationRepository extends JpaRepository<Conversation, Inte
                     """
     )
     List<ConversationResponse> findConversationsByUserId(int userId);
+
+   
+
+    List<Conversation> findByUser1OrUser2(User user1, User user2);
+
 }

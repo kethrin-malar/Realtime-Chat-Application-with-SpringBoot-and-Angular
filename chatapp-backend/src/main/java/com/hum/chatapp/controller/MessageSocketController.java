@@ -2,7 +2,9 @@ package com.hum.chatapp.controller;
 
 import com.hum.chatapp.dto.MessageRequest;
 import com.hum.chatapp.service.MessageSocketService;
-import lombok.RequiredArgsConstructor;
+//import lombok.RequiredArgsConstructor;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.stereotype.Controller;
 
@@ -17,10 +19,15 @@ import java.util.Map;
  * - /deleteConversation: Delete a conversation by its unique conversation ID using a web socket.
  * - /deleteMessage: Delete a message by its unique message ID within a conversation using a web socket.
  */
-@RequiredArgsConstructor
+//@RequiredArgsConstructor
 @Controller
 public class MessageSocketController {
     private final MessageSocketService socketService;
+    
+    @Autowired
+    public MessageSocketController(MessageSocketService socketService) {
+        this.socketService = socketService;
+    }
 
     /**
      * Send user conversations to a specific user by their user ID through a web socket.

@@ -4,7 +4,9 @@ import com.hum.chatapp.dto.ApiResponse;
 import com.hum.chatapp.dto.LoginRequest;
 import com.hum.chatapp.entity.User;
 import com.hum.chatapp.service.UserService;
-import lombok.RequiredArgsConstructor;
+//import lombok.RequiredArgsConstructor;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,12 +19,17 @@ import org.springframework.web.bind.annotation.*;
  * - GET /user/except/{userId}: Retrieve a list of all users except the user with a specific user ID.
  * - GET /user/conversation/id: Find or create a conversation ID for a pair of users based on their user IDs.
  */
-@RequiredArgsConstructor
+
 @CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/user")
 public class UserController {
     final UserService userService;
+    
+    @Autowired
+    public UserController(UserService userService) {
+        this.userService = userService;
+    }
 
     /**
      * Register a new user in the system.

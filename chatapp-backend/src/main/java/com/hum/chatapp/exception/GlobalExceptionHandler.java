@@ -19,15 +19,9 @@ public class GlobalExceptionHandler {
      * @return A ResponseEntity with an ApiResponse representing an internal server error.
      */
     @ExceptionHandler(InternalServerErrorException.class)
-    public ResponseEntity<ApiResponse> handleInternalServerErrorException(InternalServerErrorException e) {
-        return new ResponseEntity<>(
-                ApiResponse.builder()
-                        .statusCode(500)
-                        .status("Failed")
-                        .reason("I - " + e.getMessage())
-                        .build(),
-                HttpStatus.INTERNAL_SERVER_ERROR
-        );
+    public ResponseEntity<ApiResponse> someMethod() {
+        ApiResponse response = new ApiResponse(500, "Failed", "Internal Server Error", null);
+        return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     /**
@@ -38,13 +32,8 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse> handleGeneralException(Exception e) {
-        return new ResponseEntity<>(
-                ApiResponse.builder()
-                        .statusCode(500)
-                        .status("Failed")
-                        .reason(e.getMessage())
-                        .build(),
-                HttpStatus.INTERNAL_SERVER_ERROR
-        );
+    	ApiResponse response = new ApiResponse(500, "Failed", "Internal Server Error", null);
+        return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
     }
+
 }

@@ -1,135 +1,161 @@
 package com.hum.chatapp.service.impl;
 
-import com.hum.chatapp.dto.*;
+import com.hum.chatapp.dto.MessageRequest;
+import com.hum.chatapp.dto.MessageResponse;
+import com.hum.chatapp.dto.WebSocketResponse;
+import com.hum.chatapp.dto.ConversationResponse;
+import com.hum.chatapp.dto.impl.ConversationResponseImpl;
 import com.hum.chatapp.entity.Conversation;
 import com.hum.chatapp.entity.Message;
 import com.hum.chatapp.entity.User;
+import com.hum.chatapp.exception.UserNotFoundException;
 import com.hum.chatapp.repository.ConversationRepository;
 import com.hum.chatapp.repository.MessageRepository;
 import com.hum.chatapp.repository.UserRepository;
 import com.hum.chatapp.service.MessageSocketService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.sql.Date;
+import java.sql.Timestamp;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
-/**
- * Implementation of the MessageSocketService interface that handles real-time messaging functionality using web sockets.
- */
 @Service
-@RequiredArgsConstructor
 public class MessageSocketServiceImpl implements MessageSocketService {
     private final SimpMessagingTemplate messagingTemplate;
     private final UserRepository userRepository;
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
 
-    /**
-     * Send user conversations to a specific user by their user ID through a web socket.
-     *
-     * @param userId The ID of the user for whom to send conversations.
-     */
-    @Override
-    public void sendUserConversationByUserId(int userId) {
-        List<ConversationResponse> conversation = conversationRepository.findConversationsByUserId(userId);
-        messagingTemplate.convertAndSend(
-                "/topic/user/".concat(String.valueOf(userId)),
-                WebSocketResponse.builder()
-                        .type("ALL")
-                        .data(conversation)
-                        .build()
-        );
+    public MessageSocketServiceImpl(SimpMessagingTemplate messagingTemplate, 
+                                    UserRepository userRepository, 
+                                    ConversationRepository conversationRepository, 
+                                    MessageRepository messageRepository) {
+        this.messagingTemplate = messagingTemplate;
+        this.userRepository = userRepository;
+        this.conversationRepository = conversationRepository;
+        this.messageRepository = messageRepository;
     }
 
-    /**
-     * Send messages of a specific conversation to the connected users through a web socket.
-     *
-     * @param conversationId The ID of the conversation for which to send messages.
-     */
     @Override
-    public void sendMessagesByConversationId(int conversationId) {
-        Conversation conversation = new Conversation();
-        conversation.setConversationId(conversationId);
-        List<Message> messageList = messageRepository.findAllByConversation(conversation);
-        List<MessageResponse> messageResponseList = messageList.stream()
-                .map((message -> MessageResponse.builder()
-                        .messageId(message.getMessageId())
-                        .message(message.getMessage())
-                        .timestamp(Date.from(message.getTimestamp().atZone(ZoneId.systemDefault()).toInstant()))
-                        .senderId(message.getSender().getUserId())
-                        .receiverId(message.getReceiver().getUserId())
-                        .build())
-                ).toList();
-        messagingTemplate.convertAndSend("/topic/conv/".concat(String.valueOf(conversationId)), WebSocketResponse.builder()
-                .type("ALL")
-                .data(messageResponseList)
+    public void sendUserConversationByUserId(int userId) {
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new UserNotFoundException("User not found"));
+        
+        List<Conversation> conversations = conversationRepository.findByUser1OrUser2(user, user);
+        List<ConversationResponse> conversationResponses = conversations.stream()
+            .map(conversation -> new ConversationResponseImpl(
+                conversation.getConversationId(),
+                getOtherUserId(user, conversation),
+                getOtherUserName(user, conversation),
+                getLastMessage(conversation),
+                new Timestamp(System.currentTimeMillis())
+            ))
+            .collect(Collectors.toList());
+
+        messagingTemplate.convertAndSend(
+            "/topic/user/" + userId,
+            new WebSocketResponse.Builder()
+                .status("ALL")
+                .data(conversationResponses)
                 .build()
         );
     }
 
-    /**
-     * Save a new message using a web socket.
-     *
-     * @param msg The MessageRequest object containing the message details to be saved.
-     */
+    private Integer getOtherUserId(User currentUser, Conversation conversation) {
+        return conversation.getUser1().equals(currentUser) ? 
+               conversation.getUser2().getUserId() : 
+               conversation.getUser1().getUserId();
+    }
+
+    private String getOtherUserName(User currentUser, Conversation conversation) {
+        return conversation.getUser1().equals(currentUser) ? 
+               conversation.getUser2().getFirstName() : 
+               conversation.getUser1().getFirstName();
+    }
+
+    private String getLastMessage(Conversation conversation) {
+        // Placeholder: you may want to fetch the last message from the conversation
+        return "Last message"; 
+    }
+
+    @Override
+    public void sendMessagesByConversationId(int conversationId) {
+        Conversation conversation = new Conversation();
+        conversation.setConversationId(conversationId);
+        List<Message> messages = messageRepository.findAllByConversation(conversation);
+        
+        List<MessageResponse> messageResponses = messages.stream()
+            .map(message -> new MessageResponse(
+                message.getMessageId(),
+                message.getMessage(),
+                Timestamp.from(message.getTimestamp().atZone(ZoneId.systemDefault()).toInstant()),
+                message.getSender().getUserId(),
+                message.getReceiver().getUserId()
+            ))
+            .collect(Collectors.toList());
+
+        messagingTemplate.convertAndSend("/topic/conv/" + conversationId, 
+            new WebSocketResponse.Builder()
+                .status("ALL")
+                .data(messageResponses)
+                .build()
+        );
+    }
+
     @Override
     public void saveMessage(MessageRequest msg) {
-        User sender = userRepository.findById(msg.getSenderId()).get();
-        User receiver = userRepository.findById(msg.getReceiverId()).get();
-        Conversation conversation = conversationRepository.findConversationByUsers(sender, receiver).get();
+        User sender = userRepository.findById(msg.getSenderId())
+            .orElseThrow(() -> new UserNotFoundException("Sender not found"));
+        User receiver = userRepository.findById(msg.getReceiverId())
+            .orElseThrow(() -> new UserNotFoundException("Receiver not found"));
+        
+        Conversation conversation = conversationRepository.findConversationByUsers(sender, receiver)
+            .orElseThrow(() -> new RuntimeException("Conversation not found"));
+        
         Message newMessage = new Message();
         newMessage.setMessage(msg.getMessage());
         newMessage.setTimestamp(msg.getTimestamp());
         newMessage.setConversation(conversation);
         newMessage.setSender(sender);
         newMessage.setReceiver(receiver);
+        
         Message savedMessage = messageRepository.save(newMessage);
-        // notify listener
-        MessageResponse res = MessageResponse.builder()
-                .messageId(savedMessage.getMessageId())
-                .message(savedMessage.getMessage())
-                .timestamp(Date.from(savedMessage.getTimestamp().atZone(ZoneId.systemDefault()).toInstant()))
-                .senderId(savedMessage.getSender().getUserId())
-                .receiverId(savedMessage.getReceiver().getUserId())
-                .build();
-        messagingTemplate.convertAndSend("/topic/conv/".concat(msg.getConversationId().toString()),
-                WebSocketResponse.builder()
-                        .type("ADDED")
-                        .data(res)
-                        .build()
+        
+        MessageResponse messageResponse = new MessageResponse(
+            savedMessage.getMessageId(),
+            savedMessage.getMessage(),
+            Timestamp.from(savedMessage.getTimestamp().atZone(ZoneId.systemDefault()).toInstant()),
+            savedMessage.getSender().getUserId(),
+            savedMessage.getReceiver().getUserId()
         );
+
+        messagingTemplate.convertAndSend("/topic/conv/" + msg.getConversationId(), 
+            new WebSocketResponse.Builder()
+                .status("ADDED")
+                .data(messageResponse)
+                .build()
+        );
+
         sendUserConversationByUserId(msg.getSenderId());
         sendUserConversationByUserId(msg.getReceiverId());
     }
 
-    /**
-     * Delete a conversation by its unique conversation ID using a web socket.
-     *
-     * @param conversationId The ID of the conversation to be deleted.
-     */
     @Transactional
     @Override
     public void deleteConversationByConversationId(int conversationId) {
-        Conversation c = new Conversation();
-        c.setConversationId(conversationId);
-        messageRepository.deleteAllByConversation(c);
+        Conversation conversation = new Conversation();
+        conversation.setConversationId(conversationId);
+        messageRepository.deleteAllByConversation(conversation);
         conversationRepository.deleteById(conversationId);
     }
 
-    /**
-     * Delete a message by its unique message ID within a conversation using a web socket.
-     *
-     * @param conversationId The ID of the conversation to notify its listener.
-     * @param messageId      The ID of the message to be deleted.
-     */
     @Override
     public void deleteMessageByMessageId(int conversationId, int messageId) {
         messageRepository.deleteById(messageId);
-        // notify listener
         sendMessagesByConversationId(conversationId);
     }
 }

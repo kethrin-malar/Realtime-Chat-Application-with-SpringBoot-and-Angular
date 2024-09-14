@@ -13,4 +13,6 @@ public interface ConversationResponse {
     String getLastMessage();
 
     Timestamp getLastMessageTimestamp();
+    
+    
 }
