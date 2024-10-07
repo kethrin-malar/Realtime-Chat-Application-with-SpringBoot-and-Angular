@@ -42,6 +42,7 @@ export class ChatComponent implements OnInit, OnDestroy {
   showUserState: boolean = false;
   // Input field for send message
   message: string = '';
+loggedInUserName: any;
 
   constructor(
     private router: Router,
@@ -52,7 +53,11 @@ export class ChatComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    // Subscribe to userId websocket to get updated conversation when gets new messages
+   
+    //the current user name show the dashboard
+    this.loggedInUserName = `${this.currentUser.firstName} ${this.currentUser.lastName}`;
+
+     // Subscribe to userId websocket to get updated conversation when gets new messages
     this.subscribeToCurrentUserConversation();
   }
 
